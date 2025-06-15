@@ -25,7 +25,6 @@ apply_sum_trap_filter = st.checkbox("Filter: Sum ends in 0 or 5", value=False)
 apply_mirror_sum_filter = st.checkbox("Filter: Mirror Sum = Digit Sum", value=False)
 apply_uniform_vtrac_filter = st.checkbox("Filter: All digits same V-Trac group", value=False)
 apply_top_sum_filter = st.checkbox("Filter: Must match top 10 frequent sums", value=False)
-
 save_preset = st.checkbox("Save current filter settings")
 
 if all([hot, cold, due, seed]):
@@ -34,7 +33,7 @@ if all([hot, cold, due, seed]):
     due_digits = set(due.split(","))
     seed_digits = set(seed.split(","))
 
-    # --- Top Frequent Target Sums (non-optional percentile filter) ---
+    # --- Top Frequent Target Sums (non-optional percentile filter pre-deduplication) ---
     top_sums = {13, 14, 17, 19, 21, 23, 24, 26, 28, 30}
 
     candidates = []
@@ -46,7 +45,6 @@ if all([hot, cold, due, seed]):
         digits = list(combo)
         digit_counts = Counter(digits)
 
-        # --- Core Rule: Must match top frequent sums ---
         digit_sum = sum(map(int, digits))
         if digit_sum not in top_sums:
             continue
@@ -55,7 +53,6 @@ if all([hot, cold, due, seed]):
             candidates.append("".join(digits))
             continue
 
-        # --- Required Conditions ---
         if sum(d in seed_digits for d in digits) < 2:
             continue
         if sum(d in (hot_digits | cold_digits | due_digits) for d in digits) < 2:
@@ -65,7 +62,6 @@ if all([hot, cold, due, seed]):
         if exclude_triples and max(digit_counts.values()) >= 3:
             continue
 
-        # --- Optional Filters ---
         if apply_mirror_sum_filter and sum(map(int, digits)) == sum([9 - int(d) for d in digits]):
             continue
         if apply_uniform_vtrac_filter and len(set(int(d)%5 for d in digits)) == 1:
@@ -99,29 +95,30 @@ if all([hot, cold, due, seed]):
     st.success(f"After deduplication: {len(deduped)} unique box combinations remain ✅")
 
     # --- Trap score ranking ---
-    def trapv3_score(combo):
-        hot = {'0', '1', '3'}
-        cold = {'2', '4', '7'}
-        due = {'5', '6'}
-        prime = {'2', '3', '5', '7'}
+    if st.button("Run Trap v3 Scoring"):
+        def trapv3_score(combo):
+            hot = {'0', '1', '3'}
+            cold = {'2', '4', '7'}
+            due = {'5', '6'}
+            prime = {'2', '3', '5', '7'}
 
-        hot_count = sum(1 for d in combo if d in hot)
-        cold_count = sum(1 for d in combo if d in cold)
-        due_count = sum(1 for d in combo if d in due)
-        neutral_count = 5 - (hot_count + cold_count + due_count)
-        prime_count = sum(1 for d in combo if d in prime)
+            hot_count = sum(1 for d in combo if d in hot)
+            cold_count = sum(1 for d in combo if d in cold)
+            due_count = sum(1 for d in combo if d in due)
+            neutral_count = 5 - (hot_count + cold_count + due_count)
+            prime_count = sum(1 for d in combo if d in prime)
 
-        return round(hot_count * 1.5 + cold_count * 1.25 + due_count * 1.0 + neutral_count * 0.5 + prime_count * 1.0, 2)
+            return round(hot_count * 1.5 + cold_count * 1.25 + due_count * 1.0 + neutral_count * 0.5 + prime_count * 1.0, 2)
 
-    scored = [(combo, trapv3_score(combo)) for combo in deduped]
-    scored.sort(key=lambda x: x[1], reverse=True)
+        scored = [(combo, trapv3_score(combo)) for combo in deduped]
+        scored.sort(key=lambda x: x[1], reverse=True)
 
-    for combo, score in scored:
-        st.write(f"{combo} → Trap v3 Score: {score}")
+        for combo, score in scored:
+            st.write(f"{combo} → Trap v3 Score: {score}")
 
-    st.download_button(
-        "Download Combos",
-        data="\n".join(f"{combo} → Score: {score}" for combo, score in scored),
-        file_name="filtered_combos_scored.txt",
-        mime="text/plain"
-    )
+        st.download_button(
+            "Download Combos",
+            data="\n".join(f"{combo} → Score: {score}" for combo, score in scored),
+            file_name="filtered_combos_scored.txt",
+            mime="text/plain"
+        )
