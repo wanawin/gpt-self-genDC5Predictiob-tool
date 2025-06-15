@@ -13,10 +13,40 @@ cold = st.text_input("Enter cold digits (comma-separated):")
 due = st.text_input("Enter due digits (comma-separated):")
 seed = st.text_input("Enter seed digits (comma-separated):")
 
+# --- Historical Seed-to-Winner Sum Mapping ---
+seed_sum_to_valid_winner_sums = {
+    11: {14, 15},
+    12: {15, 16},
+    13: {16, 17},
+    14: {16, 17, 18},
+    15: {14, 15, 16, 17},
+    16: {15, 16, 17},
+    17: {16, 17, 18},
+    18: {16, 17, 19},
+    19: {17, 19, 20},
+    20: {18, 20, 21},
+    21: {19, 20, 21, 22},
+    22: {20, 21, 22, 23},
+    23: {21, 22, 23, 24},
+    24: {22, 23, 24, 25},
+    25: {23, 24, 25},
+    26: {24, 25, 26, 27},
+    27: {25, 26, 27, 28},
+    28: {26, 27, 28},
+    29: {27, 28, 29, 30},
+    30: {28, 29, 30, 31},
+    31: {29, 30, 31, 32},
+    32: {30, 31, 32, 33},
+    33: {31, 32, 33, 34},
+    34: {32, 33, 34},
+    35: {33, 34, 35},
+    36: {34, 35, 36}
+}
+
 # --- Toggles for filters ---
 st.markdown("### Filters (toggle to activate — shows combo count after each)")
 run_filters = st.checkbox("✅ Apply all filters (recommended)", value=False)
-exclude_triples = st.checkbox("Eliminate Triples (3 of the same digit, optional)", help="Removes combos that contain 3 repeating digits (e.g. 111xx)")", value=False)
+exclude_triples = st.checkbox("Eliminate Triples (3 of the same digit, optional)", help="Removes combos that contain 3 repeating digits (e.g. 111xx)")
 apply_spread_filter = st.checkbox("Filter: Digit Spread < 4", help="Eliminates combos where the highest digit minus lowest digit is less than 4")
 apply_mirror_filter = st.checkbox("Filter: Mirror Count < 2", help="Removes combos with fewer than 2 mirror digits from the seed or trap digit set")
 apply_high_digit_filter = st.checkbox("Filter: Max 2 digits > 5", help="Removes combos that contain more than two digits greater than 5")
@@ -25,7 +55,6 @@ apply_prime_filter = st.checkbox("Filter: 3+ Unique Prime Digits", help="Elimina
 apply_sum_trap_filter = st.checkbox("Filter: Sum ends in 0 or 5", help="Removes combos where the sum of digits ends in 0 or 5")
 apply_mirror_sum_filter = st.checkbox("Filter: Mirror Sum = Digit Sum", help="Eliminates combos where the sum of digits equals the sum of their mirrors (9 - digit)")
 apply_uniform_vtrac_filter = st.checkbox("Filter: All digits same V-Trac group", help="Eliminates combos where all digits fall into the same V-Trac group (digit % 5)")
-apply_top_sum_filter = st.checkbox("Filter: Must match top 10 frequent sums", help="Restricts combos to only those with total digit sums among the 10 most frequent historically")
 save_preset = st.checkbox("Save current filter settings")
 
 if all([hot, cold, due, seed]):
@@ -33,8 +62,9 @@ if all([hot, cold, due, seed]):
     cold_digits = set(cold.split(","))
     due_digits = set(due.split(","))
     seed_digits = set(seed.split(","))
-
-    top_sums = {13, 14, 17, 19, 21, 23, 24, 26, 28, 30}
+    
+    seed_sum = sum(map(int, seed_digits))
+    valid_sums = seed_sum_to_valid_winner_sums.get(seed_sum, set())
 
     candidates = []
     all_digits = list(set(hot_digits | cold_digits | due_digits | seed_digits))
@@ -46,7 +76,7 @@ if all([hot, cold, due, seed]):
         digit_counts = Counter(digits)
         digit_sum = sum(map(int, digits))
 
-        if digit_sum not in top_sums:
+        if digit_sum not in valid_sums:
             continue
 
         if not run_filters:
