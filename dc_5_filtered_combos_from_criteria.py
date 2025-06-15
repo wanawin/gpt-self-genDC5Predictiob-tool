@@ -14,17 +14,19 @@ due = st.text_input("Enter due digits (comma-separated):")
 seed = st.text_input("Enter seed digits (comma-separated):")
 
 # --- Toggles for filters ---
-run_filters = st.checkbox("✅ Apply all filters (recommended)", value=True)
+run_filters = st.checkbox("✅ Apply all filters (recommended)", value=False)
 exclude_triples = st.checkbox("Eliminate Triples (3 of the same digit)", value=False)
-apply_spread_filter = st.checkbox("Filter: Digit Spread < 4", value=True)
-apply_mirror_filter = st.checkbox("Filter: Mirror Count < 2", value=True)
-apply_high_digit_filter = st.checkbox("Filter: Max 2 digits > 5", value=True)
-apply_vtrac_filter = st.checkbox("Filter: No 4+ repeats of same V-Trac group", value=True)
-apply_prime_filter = st.checkbox("Filter: 3+ Unique Prime Digits", value=True)
-apply_sum_trap_filter = st.checkbox("Filter: Sum ends in 0 or 5", value=True)
-apply_mirror_sum_filter = st.checkbox("Filter: Mirror Sum = Digit Sum", value=True)
-apply_uniform_vtrac_filter = st.checkbox("Filter: All digits same V-Trac group", value=True)
-apply_top_sum_filter = st.checkbox("Filter: Must match top 10 frequent sums", value=True)
+apply_spread_filter = st.checkbox("Filter: Digit Spread < 4", value=False)
+apply_mirror_filter = st.checkbox("Filter: Mirror Count < 2", value=False)
+apply_high_digit_filter = st.checkbox("Filter: Max 2 digits > 5", value=False)
+apply_vtrac_filter = st.checkbox("Filter: No 4+ repeats of same V-Trac group", value=False)
+apply_prime_filter = st.checkbox("Filter: 3+ Unique Prime Digits", value=False)
+apply_sum_trap_filter = st.checkbox("Filter: Sum ends in 0 or 5", value=False)
+apply_mirror_sum_filter = st.checkbox("Filter: Mirror Sum = Digit Sum", value=False)
+apply_uniform_vtrac_filter = st.checkbox("Filter: All digits same V-Trac group", value=False)
+apply_top_sum_filter = st.checkbox("Filter: Must match top 10 frequent sums", value=False)
+
+save_preset = st.checkbox("Save current filter settings")
 
 if all([hot, cold, due, seed]):
     hot_digits = set(hot.split(","))
@@ -37,6 +39,8 @@ if all([hot, cold, due, seed]):
 
     candidates = []
     all_digits = list(set(hot_digits | cold_digits | due_digits | seed_digits))
+
+    st.write(f"Initial combos before filtering: {len(all_digits) ** 5}")
 
     for combo in itertools.product(all_digits, repeat=5):
         digits = list(combo)
@@ -81,6 +85,8 @@ if all([hot, cold, due, seed]):
 
         candidates.append("".join(digits))
 
+    st.write(f"After filtering: {len(candidates)} combos remain")
+
     # --- Deduplicate by box form
     seen = set()
     deduped = []
@@ -90,14 +96,32 @@ if all([hot, cold, due, seed]):
             seen.add(box)
             deduped.append(c)
 
-    st.success(f"Generated {len(deduped)} unique box combinations that match all active filters ✅")
+    st.success(f"After deduplication: {len(deduped)} unique box combinations remain ✅")
 
-    for c in deduped:
-        st.write(c)
+    # --- Trap score ranking ---
+    def trapv3_score(combo):
+        hot = {'0', '1', '3'}
+        cold = {'2', '4', '7'}
+        due = {'5', '6'}
+        prime = {'2', '3', '5', '7'}
+
+        hot_count = sum(1 for d in combo if d in hot)
+        cold_count = sum(1 for d in combo if d in cold)
+        due_count = sum(1 for d in combo if d in due)
+        neutral_count = 5 - (hot_count + cold_count + due_count)
+        prime_count = sum(1 for d in combo if d in prime)
+
+        return round(hot_count * 1.5 + cold_count * 1.25 + due_count * 1.0 + neutral_count * 0.5 + prime_count * 1.0, 2)
+
+    scored = [(combo, trapv3_score(combo)) for combo in deduped]
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    for combo, score in scored:
+        st.write(f"{combo} → Trap v3 Score: {score}")
 
     st.download_button(
         "Download Combos",
-        data="\n".join(deduped),
-        file_name="filtered_combos.txt",
+        data="\n".join(f"{combo} → Score: {score}" for combo, score in scored),
+        file_name="filtered_combos_scored.txt",
         mime="text/plain"
     )
