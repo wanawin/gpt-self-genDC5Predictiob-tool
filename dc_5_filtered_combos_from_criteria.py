@@ -19,6 +19,9 @@ if all([hot, cold, due, seed]):
     due_digits = set(due.split(","))
     seed_digits = set(seed.split(","))
 
+    # --- Most Frequent Target Sums ---
+    top_sums = {13, 14, 17, 19, 21, 23, 24, 26, 28, 30}
+
     candidates = []
     all_digits = list(set(hot_digits | cold_digits | due_digits | seed_digits))
 
@@ -59,17 +62,30 @@ if all([hot, cold, due, seed]):
         if sum(map(int, digits)) % 10 in {0, 5}:
             continue
 
+        # --- Rule: Must match top frequent target sums ---
+        if sum(map(int, digits)) not in top_sums:
+            continue
+
         # Passed all rules
         candidates.append("".join(digits))
 
-    st.success(f"Generated {len(candidates)} combinations that match all filters ✅")
-
+    # Deduplicate by sorted box form
+    seen = set()
+    deduped = []
     for c in candidates:
+        box = "".join(sorted(c))
+        if box not in seen:
+            seen.add(box)
+            deduped.append(c)
+
+    st.success(f"Generated {len(deduped)} unique box combinations that match all filters ✅")
+
+    for c in deduped:
         st.write(c)
 
     st.download_button(
         "Download Combos",
-        data="\n".join(candidates),
+        data="\n".join(deduped),
         file_name="filtered_combos.txt",
         mime="text/plain"
     )
