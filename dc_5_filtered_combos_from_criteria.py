@@ -36,8 +36,6 @@ apply_sum_trap_filter = st.checkbox("Sum ends in 0 or 5", help="Eliminates combo
 apply_mirror_sum_filter = st.checkbox("Mirror Sum = Digit Sum", help="Digit sum shouldn't equal mirror sum")
 apply_uniform_vtrac_filter = st.checkbox("All Same V-Trac Group", help="Removes combos with all digits in same group")
 
-combo_count_log = []
-
 if all([hot, cold, due, seed]):
     hot_digits = set(hot.split(","))
     cold_digits = set(cold.split(","))
@@ -52,6 +50,7 @@ if all([hot, cold, due, seed]):
 
     candidates = []
     removed_by_filter = Counter()
+    filter_application_count = Counter()
 
     for combo in itertools.product(all_digits, repeat=5):
         digits = list(combo)
@@ -61,12 +60,14 @@ if all([hot, cold, due, seed]):
         if digit_sum not in valid_sums:
             continue
 
+        passed = True
+        reason = None
+        filter_application_count['Initial'] += 1
+
         if not run_filters:
             candidates.append("".join(digits))
             continue
 
-        passed = True
-        reason = None
         if sum(d in seed_digits for d in digits) < 2:
             passed = False
             reason = "<2 seed digits"
