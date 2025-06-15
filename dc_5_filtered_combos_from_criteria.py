@@ -1,19 +1,18 @@
 import streamlit as st
 import itertools
 from collections import Counter
+from datetime import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="DC-5 Guided Combo Generator", layout="wide")
 st.title("🎯 DC-5 Combo Generator by Filter Rules Only")
 
-st.markdown("This tool generates 5-digit combinations based only on filter rules, **not** by enumerating the full 00000–99999 space.")
-
-# --- Input: Hot, Cold, Due, Seed Digits ---
 hot = st.text_input("Enter hot digits (comma-separated):")
 cold = st.text_input("Enter cold digits (comma-separated):")
 due = st.text_input("Enter due digits (comma-separated):")
 seed = st.text_input("Enter seed digits (comma-separated):")
 
-# --- Historical Seed-to-Winner Sum Mapping ---
 seed_sum_to_valid_winner_sums = {
     11: {14, 15}, 12: {15, 16}, 13: {16, 17}, 14: {16, 17, 18}, 15: {14, 15, 16, 17},
     16: {15, 16, 17}, 17: {16, 17, 18}, 18: {16, 17, 19}, 19: {17, 19, 20}, 20: {18, 20, 21},
@@ -23,18 +22,14 @@ seed_sum_to_valid_winner_sums = {
     33: {31, 32, 33, 34}, 34: {32, 33, 34}, 35: {33, 34, 35}, 36: {34, 35, 36}
 }
 
-# --- Toggles for filters ---
-st.markdown("### Filters (click to activate)")
-run_filters = st.checkbox("✅ Apply all filters (recommended)", value=False)
-exclude_triples = st.checkbox("Eliminate Triples", help="Remove combos with 3 of the same digit")
-apply_spread_filter = st.checkbox("Digit Spread < 4", help="Eliminates combos with small spread between digits")
-apply_mirror_filter = st.checkbox("Mirror Count < 2", help="Requires at least 2 mirror digits from input set")
-apply_high_digit_filter = st.checkbox("Max 2 digits ≥ 8", help="Limits combos with many high digits")
-apply_vtrac_filter = st.checkbox("No 4+ V-Trac repeats", help="Removes combos with too many digits in one V-Trac group")
-apply_prime_filter = st.checkbox("3+ Prime Digits", help="Eliminates combos with 3 or more of 2, 3, 5, 7")
-apply_sum_trap_filter = st.checkbox("Sum ends in 0 or 5", help="Eliminates combos whose sum ends in 0 or 5")
-apply_mirror_sum_filter = st.checkbox("Mirror Sum = Digit Sum", help="Digit sum shouldn't equal mirror sum")
-apply_uniform_vtrac_filter = st.checkbox("All Same V-Trac Group", help="Removes combos with all digits in same group")
+percentile_winner_sums = set(range(15, 33))
+sum_rankings = [17, 16, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+
+filter_log = []
+
+def log_filter_step(name, count):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    filter_log.append(f"[{ts}] {name}: {count} combos remain\n")
 
 if all([hot, cold, due, seed]):
     hot_digits = set(hot.split(","))
@@ -45,12 +40,11 @@ if all([hot, cold, due, seed]):
 
     seed_sum = sum(map(int, seed_digits))
     valid_sums = seed_sum_to_valid_winner_sums.get(seed_sum, set())
+    st.markdown(f"🔁 **Seed Sum = {seed_sum} → Valid Winner Sums = {sorted(valid_sums)}**")
 
-    st.markdown(f"**Seed Sum:** {seed_sum} → Valid Winner Sums: {sorted(valid_sums)}")
-
+    st.markdown("### 🚦 Automatic Filters (always applied)")
     candidates = []
     removed_by_filter = Counter()
-    filter_application_count = Counter()
 
     for combo in itertools.product(all_digits, repeat=5):
         digits = list(combo)
@@ -58,94 +52,138 @@ if all([hot, cold, due, seed]):
         digit_sum = sum(map(int, digits))
 
         if digit_sum not in valid_sums:
+            removed_by_filter["Outside Seed-to-Winner Sum Map"] += 1
             continue
-
-        passed = True
-        reason = None
-        filter_application_count['Initial'] += 1
-
-        if not run_filters:
-            candidates.append("".join(digits))
-            continue
-
         if sum(d in seed_digits for d in digits) < 2:
-            passed = False
-            reason = "<2 seed digits"
-        elif sum(d in (hot_digits | cold_digits | due_digits) for d in digits) < 2:
-            passed = False
-            reason = "<2 from H/C/D"
-        elif max(digit_counts.values()) >= 4:
-            passed = False
-            reason = "Quad/Quint"
-        elif exclude_triples and max(digit_counts.values()) >= 3:
-            passed = False
-            reason = "Triple"
-        elif apply_mirror_sum_filter and digit_sum == sum([9 - int(d) for d in digits]):
-            passed = False
-            reason = "Mirror = Sum"
-        elif apply_uniform_vtrac_filter and len(set(int(d) % 5 for d in digits)) == 1:
-            passed = False
-            reason = "Uniform V-Trac"
-        elif apply_prime_filter and len(set(d for d in digits if d in {"2", "3", "5", "7"})) >= 3:
-            passed = False
-            reason = "3+ Primes"
-        elif apply_high_digit_filter and sum(1 for d in digits if int(d) >= 8) >= 2:
-            passed = False
-            reason = "High Digits"
-        elif apply_sum_trap_filter and digit_sum % 10 in {0, 5}:
-            passed = False
-            reason = "Sum Ends 0/5"
-        elif apply_spread_filter and (max(map(int, digits)) - min(map(int, digits))) < 4:
-            passed = False
-            reason = "Spread < 4"
-        elif apply_mirror_filter and sum(d in {"0","1","2","3","4","5","6","7","8","9"} for d in digits) < 2:
-            passed = False
-            reason = "<2 Mirror Digits"
-        elif apply_vtrac_filter and max(Counter([int(d)%5 for d in digits]).values()) >= 4:
-            passed = False
-            reason = "4+ V-Trac Repeats"
+            removed_by_filter["<2 seed digits"] += 1
+            continue
+        if sum(d in (hot_digits | cold_digits | due_digits) for d in digits) < 2:
+            removed_by_filter["<2 from H/C/D"] += 1
+            continue
+        if max(digit_counts.values()) >= 4:
+            removed_by_filter["Quad/Quint"] += 1
+            continue
 
-        if passed:
-            candidates.append("".join(digits))
-        else:
-            removed_by_filter[reason] += 1
+        candidates.append("".join(digits))
 
-    st.write(f"✅ **After Filters:** {len(candidates)} combos")
+    st.markdown(f"✅ **After Auto Filters:** {len(candidates)} combos")
+    log_filter_step("After Auto Filters", len(candidates))
     for reason, count in removed_by_filter.items():
-        st.write(f"🚫 {reason}: {count} removed")
+        st.markdown(f"🚫 {reason}: {count} removed")
+
+    st.markdown("### 🧪 Manual Filters")
+    exclude_triples = st.checkbox("Eliminate Triples")
+    apply_spread_filter = st.checkbox("Digit Spread < 4")
+    apply_high_digit_filter = st.checkbox("Max 2 digits ≥ 8")
+    apply_prime_filter = st.checkbox("3+ Prime Digits")
+
+    filtered_manual = []
+    removed_manual = Counter()
+    for c in candidates:
+        digits = list(c)
+        digit_counts = Counter(digits)
+        if exclude_triples and max(digit_counts.values()) >= 3:
+            removed_manual["Triple"] += 1
+            continue
+        if apply_spread_filter and (max(map(int, digits)) - min(map(int, digits))) < 4:
+            removed_manual["Spread < 4"] += 1
+            continue
+        if apply_high_digit_filter and sum(1 for d in digits if int(d) >= 8) >= 2:
+            removed_manual["High Digits"] += 1
+            continue
+        if apply_prime_filter and len([d for d in digits if d in {"2", "3", "5", "7"}]) >= 3:
+            removed_manual["3+ Primes"] += 1
+            continue
+        filtered_manual.append(c)
+
+    st.markdown(f"✅ After Manual Filters: {len(filtered_manual)} combos")
+    log_filter_step("After Manual Filters", len(filtered_manual))
+    for reason, count in removed_manual.items():
+        st.markdown(f"🛑 {reason}: {count} removed")
 
     seen = set()
     deduped = []
-    for c in candidates:
+    for c in filtered_manual:
         box = "".join(sorted(c))
         if box not in seen:
             seen.add(box)
             deduped.append(c)
 
     st.success(f"✅ **After Deduplication:** {len(deduped)} unique box combos")
+    log_filter_step("After Deduplication", len(deduped))
 
-    if st.button("Run Trap v3 Scoring"):
+    st.markdown("### 📊 Post-Deduplication: Top Winner Percentile Filter")
+    filtered_by_percentile = [c for c in deduped if sum(map(int, c)) in percentile_winner_sums]
+    st.info(f"✅ After Winner Percentile Filter: {len(filtered_by_percentile)} combos")
+    log_filter_step("After Percentile Filter", len(filtered_by_percentile))
+
+    st.markdown("### ✂️ Manual Winner Sum Filters (Ranked by Likelihood)")
+    selected_sums = []
+    for s in sum_rankings:
+        if s in valid_sums:
+            checked = True if sum_rankings.index(s) < 3 else False
+            if st.checkbox(f"Sum {s} [#{sum_rankings.index(s)+1}]", value=checked):
+                selected_sums.append(s)
+
+    final_combos = [c for c in filtered_by_percentile if sum(map(int, c)) in selected_sums]
+    st.success(f"✅ Final Combo Count After Manual Sum Trim: {len(final_combos)}")
+    log_filter_step("After Manual Sum Trim", len(final_combos))
+
+    if st.button("📈 Run Trap v3 Scoring"):
         def trapv3_score(combo):
-            hot = {'0', '1', '3'}
-            cold = {'2', '4', '7'}
-            due = {'5', '6'}
+            hot_set = {'0', '1', '3'}
+            cold_set = {'2', '4', '7'}
+            due_set = {'5', '6'}
             prime = {'2', '3', '5', '7'}
-            hot_count = sum(1 for d in combo if d in hot)
-            cold_count = sum(1 for d in combo if d in cold)
-            due_count = sum(1 for d in combo if d in due)
+            hot_count = sum(1 for d in combo if d in hot_set)
+            cold_count = sum(1 for d in combo if d in cold_set)
+            due_count = sum(1 for d in combo if d in due_set)
             neutral_count = 5 - (hot_count + cold_count + due_count)
             prime_count = sum(1 for d in combo if d in prime)
             return round(hot_count * 1.5 + cold_count * 1.25 + due_count * 1.0 + neutral_count * 0.5 + prime_count * 1.0, 2)
 
-        scored = [(combo, trapv3_score(combo)) for combo in deduped]
+        scored = [(combo, trapv3_score(combo)) for combo in final_combos]
         scored.sort(key=lambda x: x[1], reverse=True)
 
-        for combo, score in scored:
+        scores = [score for _, score in scored]
+        min_score = min(scores)
+        max_score = max(scores)
+        score_cutoff = st.slider("Minimum Trap v3 Score", min_value=min_score, max_value=max_score, value=min_score, step=0.25)
+
+        filtered_scored = [(combo, score) for combo, score in scored if score >= score_cutoff]
+        st.markdown(f"✅ Combos after score filter (≥ {score_cutoff}): {len(filtered_scored)}")
+
+        st.markdown("### 📊 Trap Score Distribution")
+        fig, ax = plt.subplots()
+        ax.hist(scores, bins=10, edgecolor='black')
+        ax.set_title("Trap v3 Score Distribution")
+        ax.set_xlabel("Score")
+        ax.set_ylabel("Frequency")
+        st.pyplot(fig)
+
+        st.markdown("### ⭐ Scored Combos")
+        for combo, score in filtered_scored:
             st.write(f"{combo} → Trap v3 Score: {score}")
 
+        df = pd.DataFrame(filtered_scored, columns=["Combo", "Score"])
         st.download_button(
-            "Download Combos",
-            data="\n".join(f"{combo} → Score: {score}" for combo, score in scored),
-            file_name="filtered_combos_scored.txt",
+            label="📥 Download Scored Combos (.txt)",
+            data="\n".join(f"{combo} → Score: {score}" for combo, score in filtered_scored),
+            file_name="scored_combos.txt",
+            mime="text/plain"
+        )
+        st.download_button(
+            label="📊 Download Scored Combos (.csv)",
+            data=df.to_csv(index=False),
+            file_name="scored_combos.csv",
+            mime="text/csv"
+        )
+
+    if st.button("📄 Download Filter Log"):
+        filename = f"filter_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        st.download_button(
+            label="Download Filter Log (.txt)",
+            data="".join(filter_log),
+            file_name=filename,
             mime="text/plain"
         )
