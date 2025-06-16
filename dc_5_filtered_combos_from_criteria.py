@@ -3,7 +3,7 @@ import itertools
 from collections import Counter
 from datetime import datetime
 import pandas as pd
-import matplotlib.pyplot as plt
+# removed matplotlib due to deployment limitations
 
 st.set_page_config(page_title="DC-5 Guided Combo Generator", layout="wide")
 st.title("🎯 DC-5 Combo Generator by Filter Rules Only")
@@ -154,18 +154,18 @@ if all([hot, cold, due, seed]):
         st.markdown(f"✅ Combos after score filter (≥ {score_cutoff}): {len(filtered_scored)}")
 
         st.markdown("### 📊 Trap Score Distribution")
-        fig, ax = plt.subplots()
-        ax.hist(scores, bins=10, edgecolor='black')
-        ax.set_title("Trap v3 Score Distribution")
-        ax.set_xlabel("Score")
-        ax.set_ylabel("Frequency")
-        st.pyplot(fig)
+        st.markdown("### 🏆 Top 5 Highest-Scoring Combos")
+top5 = filtered_scored[:5]
+for i, (combo, score) in enumerate(top5, 1):
+    st.write(f"#{i}: {combo} → Score: {score}")
+st.bar_chart(pd.Series(scores).value_counts().sort_index())
 
         st.markdown("### ⭐ Scored Combos")
         for combo, score in filtered_scored:
             st.write(f"{combo} → Trap v3 Score: {score}")
 
         df = pd.DataFrame(filtered_scored, columns=["Combo", "Score"])
+df["Rank"] = df["Score"].rank(method="first", ascending=False).astype(int)
         st.download_button(
             label="📥 Download Scored Combos (.txt)",
             data="\n".join(f"{combo} → Score: {score}" for combo, score in filtered_scored),
