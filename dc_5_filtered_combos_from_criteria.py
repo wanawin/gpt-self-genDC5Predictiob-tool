@@ -3,7 +3,6 @@ import itertools
 from collections import Counter
 from datetime import datetime
 import pandas as pd
-# removed matplotlib due to deployment limitations
 
 st.set_page_config(page_title="DC-5 Guided Combo Generator", layout="wide")
 st.title("🎯 DC-5 Combo Generator by Filter Rules Only")
@@ -35,7 +34,7 @@ if all([hot, cold, due, seed]):
     hot_digits = set(hot.split(","))
     cold_digits = set(cold.split(","))
     due_digits = set(due.split(","))
-    seed_digits = seed.split(",")  # List form preserves duplicates for correct sum calculation
+    seed_digits = seed.split(",")
     all_digits = list(set(hot_digits | cold_digits | due_digits | set(seed_digits)))
 
     seed_sum = sum(map(int, seed_digits))
@@ -72,29 +71,43 @@ if all([hot, cold, due, seed]):
         st.markdown(f"🚫 {reason}: {count} removed")
 
     st.markdown("### 🧪 Manual Filters")
-    exclude_triples = st.checkbox("Eliminate Triples")
-    apply_spread_filter = st.checkbox("Digit Spread < 4")
-    apply_high_digit_filter = st.checkbox("Max 2 digits ≥ 8")
-    apply_prime_filter = st.checkbox("3+ Prime Digits")
+
+    filters = {
+        "Eliminate Triples": lambda d, c: max(c.values()) >= 3,
+        "Digit Spread < 4": lambda d, c: (max(map(int, d)) - min(map(int, d))) < 4,
+        "Max 2 digits ≥ 8": lambda d, c: sum(1 for x in d if int(x) >= 8) >= 2,
+        "3+ Prime Digits": lambda d, c: sum(1 for x in d if x in {'2','3','5','7'}) >= 3,
+        "Sum Ends in 0 or 5": lambda d, c: sum(map(int, d)) % 10 in {0, 5},
+        "All Same V-Trac Group": lambda d, c: len(set(int(x)%5 for x in d)) == 1,
+        "Mirror Count < 2": lambda d, c: sum(x in {'0','1','2','3','4','5','6','7','8','9'} for x in d) < 2,
+        "No 4+ V-Trac repeats": lambda d, c: max(Counter([int(x)%5 for x in d]).values()) >= 4,
+        "Quint": lambda d, c: len(set(d)) == 1,
+        "Quad": lambda d, c: max(c.values()) == 4,
+        "Mild Double-Double": lambda d, c: len(c) == 4 and list(c.values()).count(2) == 1,
+        "Double-Doubles Only": lambda d, c: len(c) == 3 and list(c.values()).count(2) == 2,
+        "All Low Digits (0–3)": lambda d, c: all(int(x) <= 3 for x in d),
+        "Consecutive Digit Count ≥ 3": lambda d, c: any(all(str(i) in d for i in range(j, j+3)) for j in range(8)),
+        "Strict Mirror Pair Block": lambda d, c: any(x in {'0','1','2','3','4'} and str((int(x)+5)%10) in d for x in d),
+        "Trailing Digit = Mirror Sum Digit": lambda d, c: str(sum(map(int, d)))[-1] == d[-1],
+        "2 V-Trac Groups Only": lambda d, c: len(set(int(x)%5 for x in d)) == 2,
+        "3+ Digits > 5": lambda d, c: sum(1 for x in d if int(x) > 5) >= 3
+    }
+
+    removed_manual = Counter()
+    selected = {name: st.checkbox(name) for name in filters}
 
     filtered_manual = []
-    removed_manual = Counter()
-    for c in candidates:
-        digits = list(c)
+    for combo in candidates:
+        digits = list(combo)
         digit_counts = Counter(digits)
-        if exclude_triples and max(digit_counts.values()) >= 3:
-            removed_manual["Triple"] += 1
-            continue
-        if apply_spread_filter and (max(map(int, digits)) - min(map(int, digits))) < 4:
-            removed_manual["Spread < 4"] += 1
-            continue
-        if apply_high_digit_filter and sum(1 for d in digits if int(d) >= 8) >= 2:
-            removed_manual["High Digits"] += 1
-            continue
-        if apply_prime_filter and len([d for d in digits if d in {"2", "3", "5", "7"}]) >= 3:
-            removed_manual["3+ Primes"] += 1
-            continue
-        filtered_manual.append(c)
+        skip = False
+        for name, active in selected.items():
+            if active and filters[name](digits, digit_counts):
+                removed_manual[name] += 1
+                skip = True
+                break
+        if not skip:
+            filtered_manual.append(combo)
 
     st.markdown(f"✅ After Manual Filters: {len(filtered_manual)} combos")
     log_filter_step("After Manual Filters", len(filtered_manual))
