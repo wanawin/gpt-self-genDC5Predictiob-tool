@@ -35,8 +35,8 @@ if all([hot, cold, due, seed]):
     hot_digits = set(hot.split(","))
     cold_digits = set(cold.split(","))
     due_digits = set(due.split(","))
-    seed_digits = seed.split(",")
-    all_digits = list(set(hot_digits | cold_digits | due_digits | seed_digits))
+    seed_digits = seed.split(",")  # List form preserves duplicates for correct sum calculation
+    all_digits = list(set(hot_digits | cold_digits | due_digits | set(seed_digits)))
 
     seed_sum = sum(map(int, seed_digits))
     valid_sums = seed_sum_to_valid_winner_sums.get(seed_sum, set())
