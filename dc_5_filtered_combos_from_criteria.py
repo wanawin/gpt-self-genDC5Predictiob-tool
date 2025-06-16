@@ -35,7 +35,7 @@ if all([hot, cold, due, seed]):
     hot_digits = set(hot.split(","))
     cold_digits = set(cold.split(","))
     due_digits = set(due.split(","))
-    seed_digits = set(seed.split(","))
+    seed_digits = seed.split(",")
     all_digits = list(set(hot_digits | cold_digits | due_digits | seed_digits))
 
     seed_sum = sum(map(int, seed_digits))
